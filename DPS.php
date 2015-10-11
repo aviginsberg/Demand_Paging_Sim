@@ -11,7 +11,7 @@ class DPS
 
     //Set up our vars
     protected $page_size, $total_mem_size, $program_total_words;
-    protected $Main_Memory, $word_request_sequence, $page_fault_count;
+    protected $Main_Memory, $word_request_sequence, $page_fault_count, $MM_FIFO_Tracker, $MM_FIFO_Tracker_Array;
 
 
 
@@ -23,7 +23,8 @@ class DPS
         $this->total_mem_size = $total_mem_size;
         $this->program_total_words = $program_total_words;
         $this->word_request_sequence = $word_request_sequence;
-
+        $this->MM_FIFO_Tracker_Array = Array();
+        $this->MM_FIFO_Tracker = 0;
     }
 
     public function log($msg){
@@ -61,16 +62,47 @@ class DPS
         }
     }
 
+    public function MM_Add_Track($memoryspot){
+        $this->MM_FIFO_Tracker_Array[$memoryspot] = $this->MM_FIFO_Tracker;
+        $this->MM_FIFO_Tracker++;
+    }
+
+
+
     //Add the page to MM using First In First Out. Assumes you have already checked if the page is in MM and hence does NOT prevent duplicate pages. Should only be called when there is a page fault.
     public function add_page_to_MM_FIFO($page){
         //MM is NOT full: push the item into the array
         if (!$this->is_MM_full()){
-            array_unshift($this->Main_Memory, $page);
+            //array_unshift($this->Main_Memory, $page);
+
+            //iterate thru MM until we find an open spot
+                $inserted=FALSE;
+                $i=0;
+                while(!$inserted){
+                    if(!isset($this->Main_Memory[$i])){
+                        $this->Main_Memory[$i] = $page;
+                        $this->MM_Add_Track($i);
+                        $inserted=TRUE;
+                    }
+                    $i++;
+                }
+
+            //array_push($this->Main_Memory, $page);
             $this->log("MM not full. Adding page $page to MM.");
+
         }else{
             //MM is full: shift off the oldest item and add in the new item
-            array_pop($this->Main_Memory);
-            array_unshift($this->Main_Memory, $page);
+            //array_shift($this->Main_Memory);
+            //array_push($this->Main_Memory, $page);
+
+            //Find the oldest spot in MM and replace it.
+
+            $key = array_keys($this->MM_FIFO_Tracker_Array,min($this->MM_FIFO_Tracker_Array));
+
+            $this->Main_Memory[$key[0]] = $page;
+            $this->MM_Add_Track($key[0]);
+
+
             $this->log("MM is full. Removing oldest page and adding page $page to MM.");
         }
 
@@ -121,7 +153,7 @@ class DPS
         $this->log("Page frames in MM: ".$this->get_total_page_frames());
         $this->log("Total number of words in program: ".$this->program_total_words);
         $this->log("Number of word requests made: ".count($this->word_request_sequence));
-        $this->log("Number of page faults that occured: ".$this->page_fault_count);
+        $this->log("Number of page faults that occurred: ".$this->page_fault_count);
         $this->log("Success rate: ".round((100*(1-($this->page_fault_count/count($this->word_request_sequence)))),3)."%");
         //(1- Failure-Rate = page faults / Page_Requests_Made)*100
 
